@@ -1,3 +1,5 @@
 # Makefile for launch plugins
 
-SUBDIRS = slurm
+SUBDIRS = \
+    slurm \
+    eco

@@ -525,6 +525,7 @@ AC_CONFIG_FILES([Makefile
 		 src/plugins/jobcomp/script/Makefile
 		 src/plugins/launch/Makefile
 		 src/plugins/launch/slurm/Makefile
+		 src/plugins/launch/eco/Makefile
 		 src/plugins/mcs/Makefile
 		 src/plugins/mcs/account/Makefile
 		 src/plugins/mcs/group/Makefile
