@@ -83,21 +83,71 @@ const uint32_t plugin_version   = SLURM_VERSION_NUMBER;
  * please post it to slurm-dev@schedmd.com  Thanks!
 \*****************************************************************************/
 
+typedef struct job_submit_eco_config {
+	uint32_t num_cores;
+	uint32_t cpu_freq;
+} job_submit_eco_config;
+
+static int load_config(struct job_submit_eco_config *config)
+{
+	// Open a pipe to the "echo" command
+    FILE *pipe = popen("echo '{\"cores\": 10, \"frequency\": 150000}'", "r");
+	if (!pipe) {
+		error("cannot find chronus in path");
+		return SLURM_ERROR;
+	}
+
+    // Read the output of the command
+    char output[512];
+    fgets(output, sizeof(output), pipe);
+
+	// Close the pipe
+	pclose(pipe);
+
+	// Parse the output
+	char *cores = strstr(output, "cores");
+	char *frequency = strstr(output, "frequency");
+
+	// Get the number of cores
+	char *cores_value = strtok(cores, ":");
+	cores_value = strtok(NULL, ",");
+	config->num_cores = atoi(cores_value);
+
+	// Get the frequency
+	char *frequency_value = strtok(frequency, ":");
+	frequency_value = strtok(NULL, "}");
+	config->cpu_freq = atoi(frequency_value);
+
+	return SLURM_SUCCESS;
+}
+
 extern int job_submit(job_desc_msg_t *job_desc, uint32_t submit_uid,
 		      char **err_msg)
 {
-	/* Log select fields from a job submit request. See slurm/slurm.h
-	 * for information about additional fields in job_desc_msg_t.
-	 * Note that default values for most numbers is NO_VAL */
-	info("eco submit request: account:%s begin_time:%ld dependency:%s "
-	     "name:%s partition:%s qos:%s submit_uid:%u time_limit:%u",
-	     job_desc->account, (long)job_desc->begin_time,
-	     job_desc->dependency,
-	     job_desc->name, job_desc->partition,
-	     job_desc->qos, submit_uid, job_desc->time_limit);
+	job_submit_eco_config config;
+	load_config(&config);
 
-	info("Eco submit request: %s", job_desc->script)
-	debug(" DEbugEco submit request: %s", job_desc->script)
+	info("config->num_cores: %d", config.num_cores);
+	info("config->cpu_freq: %d", config.cpu_freq);
+
+
+	uint32_t num_tasks = 15;
+	info("Settings n tasks: %d | %d", job_desc->num_tasks, num_tasks);
+	job_desc->num_tasks = num_tasks;
+
+
+	uint32_t cpu_freq = 2200000;
+	info("Settings cpu freq: %d | %d", job_desc->cpu_freq_min, cpu_freq);
+	job_desc->cpu_freq_min = cpu_freq;
+	job_desc->cpu_freq_max = cpu_freq;
+
+	info("job->cpu_freq_min: %d", job_desc->cpu_freq_min);
+	info("job->cpu_freq_max: %d", job_desc->cpu_freq_max);
+	info("job->cpu_freq_gov: %d", job_desc->cpu_freq_gov);
+	info("job->num_tasks: %d", job_desc->num_tasks);
+	info("job->cpu_per_task: %d", job_desc->cpus_per_task);
+	info("job->min_cpus: %d", job_desc->min_cpus);
+
 
 	return SLURM_SUCCESS;
 }
@@ -105,16 +155,8 @@ extern int job_submit(job_desc_msg_t *job_desc, uint32_t submit_uid,
 extern int job_modify(job_desc_msg_t *job_desc, job_record_t *job_ptr,
 		      uint32_t submit_uid)
 {
-	/* Log select fields from a job modify request. See slurm/slurm.h
-	 * for information about additional fields in job_desc_msg_t.
-	 * Note that default values for most numbers is NO_VAL */
-	info("eco modify request: account:%s begin_time:%ld dependency:%s "
-	     "job_id:%u name:%s partition:%s qos:%s submit_uid:%u "
-	     "time_limit:%u",
-	     job_desc->account, (long)job_desc->begin_time,
-	     job_desc->dependency,
-	     job_desc->job_id, job_desc->name, job_desc->partition,
-	     job_desc->qos, submit_uid, job_desc->time_limit);
+	info("Eco modify request: %s", "test");
+
 
 	return SLURM_SUCCESS;
 }
