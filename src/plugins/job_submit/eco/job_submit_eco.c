@@ -84,62 +84,63 @@ const uint32_t plugin_version   = SLURM_VERSION_NUMBER;
 \*****************************************************************************/
 
 typedef struct job_submit_eco_config {
-	uint32_t num_cores;
+	uint32_t num_tasks;
+	uint32_t cpu_cores;
 	uint32_t cpu_freq;
 } job_submit_eco_config;
 
 static int load_config(struct job_submit_eco_config *config)
 {
 	// Open a pipe to the "echo" command
-    FILE *pipe = popen("echo '{\"cores\": 10, \"frequency\": 150000}'", "r");
+    FILE *pipe = popen("/opt/chronus/chronus slurm-config-json \"amd\"", "r");
 	if (!pipe) {
 		error("cannot find chronus in path");
 		return SLURM_ERROR;
 	}
 
-    // Read the output of the command
-    char output[512];
-    fgets(output, sizeof(output), pipe);
+	info("pipe: %p", pipe);
 
-	// Close the pipe
-	pclose(pipe);
+    // Read the output of "cat" from the pipe
+    uint32_t num_tasks = 0, cpu_freq = 0;
+    fscanf(pipe, "{\"cores\": %d, \"frequency\": %d}", &num_tasks, &cpu_freq);
 
-	// Parse the output
-	char *cores = strstr(output, "cores");
-	char *frequency = strstr(output, "frequency");
+    // Close the pipe
+    pclose(pipe);
 
-	// Get the number of cores
-	char *cores_value = strtok(cores, ":");
-	cores_value = strtok(NULL, ",");
-	config->num_cores = atoi(cores_value);
+	if (num_tasks == 0 || cpu_freq == 0) {
+		debug2("num_tasks: %d | cpu_freq: %d", num_tasks, cpu_freq);
+		error("could not parse num_tasks or cpu_freq");
+		return SLURM_ERROR;
+	}
 
-	// Get the frequency
-	char *frequency_value = strtok(frequency, ":");
-	frequency_value = strtok(NULL, "}");
-	config->cpu_freq = atoi(frequency_value);
-
+	config->num_tasks = num_tasks;
+	config->cpu_freq = cpu_freq;
 	return SLURM_SUCCESS;
 }
 
 extern int job_submit(job_desc_msg_t *job_desc, uint32_t submit_uid,
 		      char **err_msg)
 {
-	job_submit_eco_config config;
-	load_config(&config);
+	int rc = SLURM_SUCCESS;
+	job_submit_eco_config config = {0,0};
+	rc = load_config(&config);
+	if (rc != SLURM_SUCCESS) {
+		error("cannot load config");
+		return rc;
+	}
 
-	info("config->num_cores: %d", config.num_cores);
+	info("config->num_cores: %d", config.num_tasks);
 	info("config->cpu_freq: %d", config.cpu_freq);
 
 
-	uint32_t num_tasks = 15;
-	info("Settings n tasks: %d | %d", job_desc->num_tasks, num_tasks);
-	job_desc->num_tasks = num_tasks;
+	info("Settings n tasks: %d | %d", job_desc->num_tasks, config.num_tasks);
+	job_desc->num_tasks = config.num_tasks;
+	job_desc->cpus_per_task = 1;
 
 
-	uint32_t cpu_freq = 2200000;
-	info("Settings cpu freq: %d | %d", job_desc->cpu_freq_min, cpu_freq);
-	job_desc->cpu_freq_min = cpu_freq;
-	job_desc->cpu_freq_max = cpu_freq;
+	info("Settings cpu freq: %d | %d", job_desc->cpu_freq_min, config.cpu_freq);
+	job_desc->cpu_freq_min = config.cpu_freq;
+	job_desc->cpu_freq_max = config.cpu_freq;
 
 	info("job->cpu_freq_min: %d", job_desc->cpu_freq_min);
 	info("job->cpu_freq_max: %d", job_desc->cpu_freq_max);
@@ -149,7 +150,7 @@ extern int job_submit(job_desc_msg_t *job_desc, uint32_t submit_uid,
 	info("job->min_cpus: %d", job_desc->min_cpus);
 
 
-	return SLURM_SUCCESS;
+	return rc;
 }
 
 extern int job_modify(job_desc_msg_t *job_desc, job_record_t *job_ptr,

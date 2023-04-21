@@ -1150,11 +1150,54 @@ static char *arg_get_cpu_freq(slurm_opt_t *opt)
 				   opt->cpu_freq_max,
 				   opt->cpu_freq_gov);
 }
+
+typedef struct job_submit_eco_config {
+	uint32_t num_tasks;
+	uint32_t cpu_freq;
+} job_submit_eco_config;
+
+static int load_config(struct job_submit_eco_config *config)
+{
+	// Open a pipe to the "echo" command
+    FILE *pipe = popen("/opt/chronus/chronus slurm-config-json \"amd\"", "r");
+	if (!pipe) {
+		error("cannot find chronus in path");
+		return SLURM_ERROR;
+	}
+
+	info("pipe: %p", pipe);
+
+    // Read the output of "cat" from the pipe
+    uint32_t num_tasks = 0, cpu_freq = 0;
+    fscanf(pipe, "{\"cores\": %d, \"frequency\": %d}", &num_tasks, &cpu_freq);
+
+    // Close the pipe
+    pclose(pipe);
+
+	if (num_tasks == 0 || cpu_freq == 0) {
+		debug2("num_tasks: %d | cpu_freq: %d", num_tasks, cpu_freq);
+		error("could not parse num_tasks or cpu_freq");
+		return SLURM_ERROR;
+	}
+
+	config->num_tasks = num_tasks;
+	config->cpu_freq = cpu_freq;
+	return SLURM_SUCCESS;
+}
 static void arg_reset_cpu_freq(slurm_opt_t *opt)
 {
+	info("reset cpu_freq_min %d", opt->cpu_freq_min);
+	info("reset cpu_freq_max %d", opt->cpu_freq_max);
+	info("reset cpu_freq_gov %d", opt->cpu_freq_gov);
 	opt->cpu_freq_min = NO_VAL;
 	opt->cpu_freq_max = NO_VAL;
 	opt->cpu_freq_gov = NO_VAL;
+	job_submit_eco_config config = {0,0};
+	if (load_config(&config) != SLURM_SUCCESS) {
+		error("could not load config");
+		return;
+	}
+	opt->cpu_freq_max = config.cpu_freq;
 }
 static slurm_cli_opt_t slurm_opt_cpu_freq = {
 	.name = "cpu-freq",
@@ -5961,6 +6004,7 @@ extern job_desc_msg_t *slurm_opt_create_job_desc(slurm_opt_t *opt_local,
 	/* cpu_bind not filled in here */
 	/* cpu_bind_type not filled in here */
 
+	info("opt_local->cpu_freq_max=%d", opt_local->cpu_freq_max);	
 	job_desc->cpu_freq_min = opt_local->cpu_freq_min;
 	job_desc->cpu_freq_max = opt_local->cpu_freq_max;
 	job_desc->cpu_freq_gov = opt_local->cpu_freq_gov;
