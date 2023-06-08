@@ -87,36 +87,103 @@ typedef struct job_submit_eco_config {
 	uint32_t num_tasks;
 	uint32_t cpu_cores;
 	uint32_t cpu_freq;
+	uint32_t threads_per_core;
 } job_submit_eco_config;
+
+unsigned long simple_hash(const char *str) {
+  unsigned long hash = 5381;
+  int c;
+  while ((c = *str++))
+      hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+  return hash;
+}
+
+unsigned long hash_binary_file(const char *filename) {
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        fprintf(stderr, "Unable to open file %s", filename);
+        return 0;
+    }
+
+    // Get the size of the file
+    fseek(file, 0, SEEK_END);
+    long filesize = ftell(file);
+    rewind(file);
+
+    // Allocate memory for the buffer
+    char *buffer = malloc(filesize + 1);
+    if (!buffer) {
+        fprintf(stderr, "Memory error!");
+        fclose(file);
+        return 0;
+    }
+
+    // Read file into buffer
+    size_t result = fread(buffer, 1, filesize, file);
+    if (result != filesize) {
+        fprintf(stderr, "Reading error!");
+        fclose(file);
+        free(buffer);
+        return 0;
+    }
+
+    // Null-terminate the buffer
+    buffer[filesize] = '\0';
+
+    // Hash the buffer
+    unsigned long hash = simple_hash(buffer);
+
+    // Clean up
+    fclose(file);
+    free(buffer);
+
+    return hash;
+}
+
+
 
 static int load_config(struct job_submit_eco_config *config)
 {
+	// read binary file
+	const char *filename = "/home/aaen/hpcg/build/bin/xhpcg";
+    unsigned long hash = hash_binary_file(filename);
+
 	// Open a pipe to the "echo" command
-    FILE *pipe = popen("/opt/chronus/chronus slurm-config-json \"amd\"", "r");
+	char command[256];
+    sprintf(command, "/opt/chronus/chronus slurm-config \"amd\" \"%lu\"", hash);
+	FILE *pipe = popen(command, "r");
 	if (!pipe) {
 		error("cannot find chronus in path");
 		return SLURM_ERROR;
 	}
 
-	info("pipe: %p", pipe);
-
     // Read the output of "cat" from the pipe
-    uint32_t num_tasks = 0, cpu_freq = 0;
-    fscanf(pipe, "{\"cores\": %d, \"frequency\": %d}", &num_tasks, &cpu_freq);
+    int32_t num_tasks = 0, cpu_freq = 0, threads_per_core = 0;
+	// {"cores": -1, "frequency": -1, "threads_per_core": -1}
+	// parse this json into num_tasks, cpu_freq, threads_per_core
+	fscanf(pipe, "{\"cores\": %d, \"frequency\": %d, \"threads_per_core\": %d}\n", &num_tasks, &cpu_freq, &threads_per_core);
 
     // Close the pipe
     pclose(pipe);
 
-	if (num_tasks == 0 || cpu_freq == 0) {
-		debug2("num_tasks: %d | cpu_freq: %d", num_tasks, cpu_freq);
+
+	if (num_tasks == -1){
+		info("DISABLED");
+	}
+	else if (num_tasks == 0 || cpu_freq == 0) {
+		debug2("num_tasks: %d | cpu_freq: %d | threads_per_core: %d", num_tasks, cpu_freq, threads_per_core);
 		error("could not parse num_tasks or cpu_freq");
 		return SLURM_ERROR;
 	}
 
-	config->num_tasks = num_tasks;
+
+	config->num_tasks = num_tasks * threads_per_core;
 	config->cpu_freq = cpu_freq;
+	config->cpu_cores = num_tasks;
+	config->threads_per_core = threads_per_core;
 	return SLURM_SUCCESS;
 }
+
 
 extern int job_submit(job_desc_msg_t *job_desc, uint32_t submit_uid,
 		      char **err_msg)
@@ -126,7 +193,7 @@ extern int job_submit(job_desc_msg_t *job_desc, uint32_t submit_uid,
 	rc = load_config(&config);
 	if (rc != SLURM_SUCCESS) {
 		error("cannot load config");
-		return rc;
+ 		return rc;
 	}
 
 	info("config->num_cores: %d", config.num_tasks);
