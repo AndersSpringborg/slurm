@@ -503,6 +503,7 @@ AC_CONFIG_FILES([Makefile
 		 src/plugins/job_submit/Makefile
 		 src/plugins/job_submit/all_partitions/Makefile
 		 src/plugins/job_submit/cray_aries/Makefile
+		 src/plugins/job_submit/eco/Makefile
 		 src/plugins/job_submit/defaults/Makefile
 		 src/plugins/job_submit/logging/Makefile
 		 src/plugins/job_submit/lua/Makefile
@@ -524,6 +525,7 @@ AC_CONFIG_FILES([Makefile
 		 src/plugins/jobcomp/script/Makefile
 		 src/plugins/launch/Makefile
 		 src/plugins/launch/slurm/Makefile
+		 src/plugins/launch/eco/Makefile
 		 src/plugins/mcs/Makefile
 		 src/plugins/mcs/account/Makefile
 		 src/plugins/mcs/group/Makefile
