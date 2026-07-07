@@ -1,3 +1,8 @@
+
+  > :warning: Contributions on https://github.com/AndersSpringborg/slurm/tree/slurm-22.05
+
+
+
 Slurm Workload Manager
 --------------------------------------------------------
 
